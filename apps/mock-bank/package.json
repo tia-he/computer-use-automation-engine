@@ -1,0 +1,20 @@
+{
+  "name": "mock-bank",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Legacy-style server-rendered mock back-office banking app used as the automation target.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}
