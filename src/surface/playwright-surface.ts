@@ -25,8 +25,11 @@ export class PlaywrightBrowserSurface implements Surface {
     return new PlaywrightBrowserSurface(browser, page);
   }
 
-  async navigate(url: string): Promise<void> {
-    await this.page.goto(url, { waitUntil: "load" });
+  async navigate(url: string, options?: { timeoutMs?: number }): Promise<void> {
+    await this.page.goto(url, {
+      waitUntil: "load",
+      ...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+    });
   }
 
   async perceive(): Promise<Observation> {

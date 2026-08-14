@@ -13,7 +13,7 @@ export interface Observation {
  * underlying automation technology.
  */
 export interface Surface {
-  navigate(url: string): Promise<void>;
+  navigate(url: string, options?: { timeoutMs?: number }): Promise<void>;
   perceive(): Promise<Observation>;
   resolve(locator: LogicalLocator): Promise<LocatorResolution>;
   click(element: ResolvedElement): Promise<void>;

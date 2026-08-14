@@ -36,8 +36,13 @@ export const openSubAccountCapability: Capability = {
     initial_deposit: {
       type: "number",
       required: true,
-      description: "Initial deposit amount in USD. Mirrors the app's $25 minimum.",
-      min: 25,
+      description: "Initial deposit amount in USD.",
+      // Deliberately no `min` here: the $25 minimum is the target app's own
+      // business rule, already modeled as the VALIDATION_ERROR business
+      // outcome below. Duplicating it as an input constraint would make
+      // that outcome unreachable (engine-level INVALID_INPUT would always
+      // fire first) and would mean the same rule living, and potentially
+      // drifting, in two places.
     },
   },
   outputs: {
