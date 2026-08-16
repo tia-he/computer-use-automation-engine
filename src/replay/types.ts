@@ -1,3 +1,5 @@
+import { InterventionRequest } from "../handoff/types";
+
 /**
  * Generic execution error codes. These are mechanical failures any
  * capability on any surface can hit — never declared by a Capability
@@ -15,7 +17,8 @@ export type ExecutionErrorCode =
   | "LOAD_TIMEOUT"
   | "CHECKPOINT_FAILED"
   | "INVALID_INPUT"
-  | "ACTION_FAILED";
+  | "ACTION_FAILED"
+  | "POLICY_DENIED";
 
 export interface ReplaySuccessResult {
   status: "success";
@@ -31,6 +34,18 @@ export interface ReplayBusinessOutcomeResult {
   completedStepIds: string[];
 }
 
+export interface ReplayEscalatedResult {
+  status: "escalated";
+  interventionRequest: InterventionRequest;
+  completedStepIds: string[];
+}
+
+export interface ReplayRejectedResult {
+  status: "rejected";
+  stepId: string;
+  completedStepIds: string[];
+}
+
 export interface ReplayFailureResult {
   status: "failure";
   errorCode: ExecutionErrorCode;
@@ -42,24 +57,18 @@ export interface ReplayFailureResult {
   completedStepIds: string[];
 }
 
-export interface ReplayBlockedResult {
-  status: "blocked";
-  reason: "irreversible_not_allowed";
-  stepId: string;
-  completedStepIds: string[];
-}
-
 export type ReplayResult =
   | ReplaySuccessResult
   | ReplayBusinessOutcomeResult
-  | ReplayFailureResult
-  | ReplayBlockedResult;
+  | ReplayEscalatedResult
+  | ReplayRejectedResult
+  | ReplayFailureResult;
 
 export interface ReplayOptions {
-  /**
-   * Full guardrail/approval workflow is a later phase. This is the entire
-   * Phase 4 seam: irreversible steps never run unless this is explicitly
-   * true. Defaults to false — replay never silently mutates state.
-   */
-  allowIrreversible?: boolean;
+  /** Identifies this run — carried onto any InterventionRequest it raises. */
+  runId: string;
+  /** Step ids explicitly approved (by an operator) for this run. */
+  approvedStepIds?: string[];
+  /** Skip steps up to and including this id — they already completed in a prior partial run. */
+  resumeAfterStepId?: string;
 }

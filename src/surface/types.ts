@@ -1,4 +1,5 @@
 import { LogicalLocator, LocatorResolution, ResolvedElement } from "../locator/types";
+import { HumanActionEvent } from "../handoff/types";
 
 export interface Observation {
   url: string;
@@ -23,5 +24,12 @@ export interface Surface {
   /** Given an element already resolved/acted on, propose a reusable LogicalLocator for it. */
   describe(element: ResolvedElement): Promise<LogicalLocator>;
   screenshot(): Promise<Buffer>;
+  /**
+   * Start observing best-effort human-driven activity (click/input/change/
+   * navigation) on the live page and reporting it through `onEvent`. Values
+   * are redacted before `onEvent` is called. Safe to call once per handoff.
+   */
+  startHumanActionRecording(onEvent: (event: HumanActionEvent) => void): Promise<void>;
+  stopHumanActionRecording(): Promise<void>;
   close(): Promise<void>;
 }

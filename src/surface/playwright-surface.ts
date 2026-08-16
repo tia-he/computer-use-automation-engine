@@ -1,10 +1,75 @@
 import { Browser, Locator, Page, chromium } from "playwright";
 import { LocatorStrategy, LogicalLocator, LocatorResolution, ResolvedElement } from "../locator/types";
 import { resolveLogicalLocator } from "../locator/resolve";
+import { HumanActionEvent } from "../handoff/types";
+import { redactValue } from "../handoff/redaction";
 import { Observation, Surface } from "./types";
 
 function escapeAttributeValue(value: string): string {
   return value.replace(/"/g, '\\"');
+}
+
+interface RawHumanActionPayload {
+  type: "click" | "input" | "change";
+  elementType: string;
+  targetDescription: string;
+  value?: string;
+}
+
+/**
+ * Self-contained (no outer-scope references) so it can be passed to both
+ * page.evaluate() — for the page as it's loaded right now — and
+ * page.addInitScript() — in case the page reloads/navigates while a human
+ * has control. Only attaches once per document; safe to invoke twice.
+ */
+function attachHumanActionListeners(): void {
+  const w = window as unknown as { __reportHumanAction?: (payload: RawHumanActionPayload) => void };
+  const report = w.__reportHumanAction;
+  if (!report || (window as unknown as { __humanActionListenersAttached?: boolean }).__humanActionListenersAttached) {
+    return;
+  }
+  (window as unknown as { __humanActionListenersAttached?: boolean }).__humanActionListenersAttached = true;
+
+  function describeTarget(el: Element): string {
+    const name = el.getAttribute("name");
+    if (name) return `${el.tagName.toLowerCase()}[name="${name}"]`;
+    return el.tagName.toLowerCase();
+  }
+
+  document.addEventListener(
+    "click",
+    (e) => {
+      const el = e.target as Element;
+      report({ type: "click", elementType: el.tagName.toLowerCase(), targetDescription: describeTarget(el) });
+    },
+    true
+  );
+  document.addEventListener(
+    "input",
+    (e) => {
+      const el = e.target as HTMLInputElement;
+      report({
+        type: "input",
+        elementType: el.type || el.tagName.toLowerCase(),
+        targetDescription: describeTarget(el),
+        value: el.value,
+      });
+    },
+    true
+  );
+  document.addEventListener(
+    "change",
+    (e) => {
+      const el = e.target as HTMLInputElement;
+      report({
+        type: "change",
+        elementType: el.type || el.tagName.toLowerCase(),
+        targetDescription: describeTarget(el),
+        value: el.value,
+      });
+    },
+    true
+  );
 }
 
 /**
@@ -14,6 +79,10 @@ function escapeAttributeValue(value: string): string {
  * no Playwright type ever leaks past this file.
  */
 export class PlaywrightBrowserSurface implements Surface {
+  private humanActionCallback?: (event: HumanActionEvent) => void;
+  private humanActionExposed = false;
+  private navigationListener?: () => void;
+
   private constructor(
     private readonly browser: Browser,
     private readonly page: Page
@@ -62,6 +131,51 @@ export class PlaywrightBrowserSurface implements Surface {
 
   async screenshot(): Promise<Buffer> {
     return this.page.screenshot();
+  }
+
+  async startHumanActionRecording(onEvent: (event: HumanActionEvent) => void): Promise<void> {
+    this.humanActionCallback = onEvent;
+
+    if (!this.humanActionExposed) {
+      this.humanActionExposed = true;
+      await this.page.exposeFunction("__reportHumanAction", (raw: RawHumanActionPayload) => {
+        this.humanActionCallback?.({
+          type: raw.type,
+          targetDescription: raw.targetDescription,
+          value: raw.value !== undefined ? redactValue(raw.elementType, raw.value) : undefined,
+          url: this.page.url(),
+          timestamp: new Date().toISOString(),
+        });
+      });
+      // Covers the page as currently loaded...
+      await this.page.evaluate(attachHumanActionListeners);
+      // ...and any future navigation while HUMAN_CONTROL still owns the session.
+      await this.page.addInitScript(attachHumanActionListeners);
+    }
+
+    // Re-attached on every call (not just the first): stopHumanActionRecording
+    // removes this listener each time, so a second escalation in the same
+    // session needs it back — unlike exposeFunction/addInitScript, which are
+    // page-level registrations that must only happen once.
+    if (this.navigationListener) {
+      this.page.off("framenavigated", this.navigationListener);
+    }
+    this.navigationListener = () => {
+      this.humanActionCallback?.({
+        type: "navigation",
+        url: this.page.url(),
+        timestamp: new Date().toISOString(),
+      });
+    };
+    this.page.on("framenavigated", this.navigationListener);
+  }
+
+  async stopHumanActionRecording(): Promise<void> {
+    if (this.navigationListener) {
+      this.page.off("framenavigated", this.navigationListener);
+      this.navigationListener = undefined;
+    }
+    this.humanActionCallback = undefined;
   }
 
   async close(): Promise<void> {

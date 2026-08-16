@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PlaywrightBrowserSurface } from "../surface/playwright-surface";
 import { ReplayEngine } from "./engine";
+import { GuardrailPolicy } from "../guardrails/policy";
 import { Capability } from "../artifact/capability";
 import { openSubAccountCapability } from "../artifact/examples/open-sub-account";
 import { mockBankTargetProfile } from "../artifact/examples/mock-bank-target-profile";
@@ -11,6 +12,11 @@ function clone(capability: Capability): Capability {
 }
 
 const validInputs = { member_id: "48213", account_type: "savings", initial_deposit: 500 };
+const fullPolicy = new GuardrailPolicy({
+  id: "test-policy",
+  allowedOrigins: [mockBankTargetProfile.allowedOrigin],
+  allowedActionKinds: ["navigate", "click", "fill", "select", "extract", "checkpoint"],
+});
 
 describe("ReplayEngine against the live mock-bank app", () => {
   let surface: PlaywrightBrowserSurface;
@@ -18,7 +24,7 @@ describe("ReplayEngine against the live mock-bank app", () => {
 
   beforeAll(async () => {
     surface = await PlaywrightBrowserSurface.launch({ headless: true });
-    engine = new ReplayEngine(surface);
+    engine = new ReplayEngine(surface, fullPolicy);
   });
 
   afterAll(async () => {
@@ -29,9 +35,10 @@ describe("ReplayEngine against the live mock-bank app", () => {
     await fetch(`${MOCK_BANK_URL}/reset`, { method: "POST" });
   });
 
-  it("replays the happy path deterministically and returns typed outputs", async () => {
+  it("replays the happy path deterministically and returns typed outputs (pre-approved)", async () => {
     const result = await engine.replay(openSubAccountCapability, mockBankTargetProfile, validInputs, {
-      allowIrreversible: true,
+      runId: "test-run-1",
+      approvedStepIds: ["click-confirm"],
     });
 
     expect(result.status).toBe("success");
@@ -48,7 +55,7 @@ describe("ReplayEngine against the live mock-bank app", () => {
       openSubAccountCapability,
       mockBankTargetProfile,
       { ...validInputs, member_id: "99999" },
-      { allowIrreversible: true }
+      { runId: "test-run-2" }
     );
 
     expect(result.status).toBe("business_outcome");
@@ -65,7 +72,7 @@ describe("ReplayEngine against the live mock-bank app", () => {
       openSubAccountCapability,
       mockBankTargetProfile,
       { ...validInputs, member_id: "50822" },
-      { allowIrreversible: true }
+      { runId: "test-run-3" }
     );
 
     expect(result.status).toBe("business_outcome");
@@ -78,7 +85,7 @@ describe("ReplayEngine against the live mock-bank app", () => {
       openSubAccountCapability,
       mockBankTargetProfile,
       { ...validInputs, initial_deposit: 5 },
-      { allowIrreversible: true }
+      { runId: "test-run-4" }
     );
 
     expect(result.status).toBe("business_outcome");
@@ -87,11 +94,12 @@ describe("ReplayEngine against the live mock-bank app", () => {
   });
 
   it("rejects invalid invocation input before touching the surface", async () => {
-    const result = await engine.replay(openSubAccountCapability, mockBankTargetProfile, {
-      member_id: "48213",
-      account_type: "savings",
-      initial_deposit: "not-a-number",
-    });
+    const result = await engine.replay(
+      openSubAccountCapability,
+      mockBankTargetProfile,
+      { member_id: "48213", account_type: "savings", initial_deposit: "not-a-number" },
+      { runId: "test-run-5" }
+    );
 
     expect(result).toMatchObject({ status: "failure", errorCode: "INVALID_INPUT", completedStepIds: [] });
   });
@@ -105,7 +113,10 @@ describe("ReplayEngine against the live mock-bank app", () => {
       };
     }
 
-    const result = await engine.replay(broken, mockBankTargetProfile, validInputs, { allowIrreversible: true });
+    const result = await engine.replay(broken, mockBankTargetProfile, validInputs, {
+      runId: "test-run-6",
+      approvedStepIds: ["click-confirm"],
+    });
 
     expect(result).toMatchObject({
       status: "failure",
@@ -123,7 +134,10 @@ describe("ReplayEngine against the live mock-bank app", () => {
       target: { strategies: [{ kind: "text", text: "Account Was Definitely Never Opened", exact: true }] },
     };
 
-    const result = await engine.replay(broken, mockBankTargetProfile, validInputs, { allowIrreversible: true });
+    const result = await engine.replay(broken, mockBankTargetProfile, validInputs, {
+      runId: "test-run-7",
+      approvedStepIds: ["click-confirm"],
+    });
 
     expect(result.status).toBe("failure");
     if (result.status !== "failure") return;
@@ -134,12 +148,20 @@ describe("ReplayEngine against the live mock-bank app", () => {
     expect(result.completedStepIds).toContain("click-confirm");
   });
 
-  it("blocks the irreversible confirm step by default and never mutates state", async () => {
-    const result = await engine.replay(openSubAccountCapability, mockBankTargetProfile, validInputs);
+  it("escalates instead of executing the irreversible confirm step when unapproved, and never mutates state", async () => {
+    const result = await engine.replay(openSubAccountCapability, mockBankTargetProfile, validInputs, {
+      runId: "test-run-8",
+    });
 
-    expect(result).toMatchObject({ status: "blocked", reason: "irreversible_not_allowed", stepId: "click-confirm" });
-    if (result.status !== "blocked") return;
+    expect(result.status).toBe("escalated");
+    if (result.status !== "escalated") return;
+    expect(result.interventionRequest.reason).toBe("APPROVAL_REQUIRED");
+    expect(result.interventionRequest.stepId).toBe("click-confirm");
+    expect(result.interventionRequest.runId).toBe("test-run-8");
+    expect(result.interventionRequest.capabilityId).toBe("open-sub-account");
     expect(result.completedStepIds).not.toContain("click-confirm");
+
+    console.log("escalated result:", JSON.stringify(result, null, 2));
 
     // Confirm the account genuinely was not created.
     await surface.navigate(`${MOCK_BANK_URL}/members/48213`);
@@ -147,5 +169,20 @@ describe("ReplayEngine against the live mock-bank app", () => {
       strategies: [{ kind: "text", text: "SAV-48213-2", exact: false }],
     });
     expect(thirdAccountRow.status).toBe("not_found");
+  });
+
+  it("denies an action outside the allowed origin (POLICY_DENIED)", async () => {
+    const narrowPolicy = new GuardrailPolicy({
+      id: "narrow-origin",
+      allowedOrigins: ["http://example.com"],
+      allowedActionKinds: ["navigate", "click", "fill", "select", "extract", "checkpoint"],
+    });
+    const restrictedEngine = new ReplayEngine(surface, narrowPolicy);
+
+    const result = await restrictedEngine.replay(openSubAccountCapability, mockBankTargetProfile, validInputs, {
+      runId: "test-run-9",
+    });
+
+    expect(result).toMatchObject({ status: "failure", errorCode: "POLICY_DENIED", failedStepId: "navigate-to-search" });
   });
 });
