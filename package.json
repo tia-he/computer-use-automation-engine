@@ -5,14 +5,17 @@
   "description": "Core engine: surface abstraction, discovery agent, capability artifacts, deterministic replay.",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "discover": "tsx scripts/run-discovery.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
     "playwright": "^1.46.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
+    "tsx": "^4.16.2",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
   }

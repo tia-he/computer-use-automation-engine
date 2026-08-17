@@ -331,6 +331,23 @@ export class PlaywrightBrowserSurface implements Surface {
       function segment(node: Element): string {
         return `${node.tagName.toLowerCase()}:nth-of-type(${nthOfType(node)})`;
       }
+      function shortText(node: Element): string | null {
+        const t = (node.textContent ?? "").trim().replace(/\s+/g, " ");
+        return t.length > 0 && t.length <= 60 ? t : null;
+      }
+
+      // Prefer "the element right after the one labeled X" when the
+      // immediate previous sibling has short, distinctive text (e.g. a
+      // label cell next to a dynamic value cell) — mirrors how a human
+      // would describe it, and avoids scoping on a landmark tag that may
+      // not be unique on the page (see below).
+      const prevSibling = el.previousElementSibling;
+      if (prevSibling) {
+        const siblingText = shortText(prevSibling);
+        if (siblingText) {
+          return { scope: { kind: "text", text: siblingText, exact: true }, selector: `+ ${el.tagName.toLowerCase()}` };
+        }
+      }
 
       const path: string[] = [];
       let node: Element = el;
@@ -342,7 +359,9 @@ export class PlaywrightBrowserSurface implements Surface {
 
       // Walk up, never past <body>, collecting a relative nth-of-type chain
       // until we find an ancestor with a stable attribute or a table/form
-      // landmark to scope against.
+      // landmark to scope against. Landmark tags aren't guaranteed unique
+      // on the page (mock-bank's own layout nests two <table>s), so this
+      // tier is a weaker fallback than the sibling-text one above.
       while (depth < 8) {
         const parent = node.parentElement;
         if (!parent || parent === document.body) break;
@@ -437,7 +456,12 @@ export class PlaywrightBrowserSurface implements Surface {
 
         let nextDepth = depth;
         if (info.role) {
-          lines.push("  ".repeat(depth) + info.role + (info.name ? ` "${info.name}"` : ""));
+          // Roles like "cell" never get a computed accessible name (that's
+          // only done for link/button/heading), but a table cell's own
+          // plain text is exactly what a snapshot reader needs to see —
+          // fall back to it rather than silently dropping the content.
+          const label = info.name || directText;
+          lines.push("  ".repeat(depth) + info.role + (label ? ` "${label}"` : ""));
           nextDepth = depth + 1;
         } else if (directText) {
           lines.push("  ".repeat(depth) + `text "${directText}"`);
