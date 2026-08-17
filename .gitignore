@@ -1,0 +1,14 @@
+.env
+.env.*
+node_modules/
+**/node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vitest/
+.DS_Store
+*.log
+
+# Generated temporary/debug evidence
+evidence/interventions/
