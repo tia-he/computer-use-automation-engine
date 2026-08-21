@@ -1,0 +1,395 @@
+{
+  "id": "open-sub-account",
+  "schemaVersion": 1,
+  "capabilityVersion": "1.0.0",
+  "description": "Search for a member, open a new sub-account, and reach the confirmation screen with the new account number and confirmation ID.",
+  "targetProfileId": "mock-bank",
+  "provenance": {
+    "discoveryRunId": "demo-1787278874924-discovery",
+    "recordedAt": "2026-08-21T02:21:17.394Z",
+    "model": "deterministic-demo-provider"
+  },
+  "approval": "draft",
+  "inputs": {
+    "member_id": {
+      "type": "string",
+      "required": true,
+      "description": "Member ID to search for.",
+      "minLength": 1
+    },
+    "account_type": {
+      "type": "enum",
+      "required": true,
+      "description": "Type of sub-account to open.",
+      "values": [
+        "savings",
+        "checking"
+      ]
+    },
+    "initial_deposit": {
+      "type": "number",
+      "required": true,
+      "description": "Initial deposit amount in USD."
+    }
+  },
+  "outputs": {
+    "new_account_number": {
+      "type": "string",
+      "sourceStepId": "step-9",
+      "description": "The newly created account's number."
+    },
+    "confirmation_id": {
+      "type": "string",
+      "sourceStepId": "step-10",
+      "description": "Confirmation identifier for the transaction."
+    }
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "risk": "safe",
+      "action": {
+        "kind": "navigate",
+        "url": {
+          "kind": "literal",
+          "value": "http://localhost:4100/"
+        }
+      }
+    },
+    {
+      "id": "step-2",
+      "risk": "safe",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "strategies": [
+            {
+              "kind": "attribute",
+              "attribute": "name",
+              "value": "memberId"
+            },
+            {
+              "kind": "css",
+              "selector": "input:nth-of-type(1)",
+              "scope": {
+                "kind": "css",
+                "selector": "form"
+              }
+            }
+          ]
+        },
+        "value": {
+          "kind": "input_ref",
+          "name": "member_id"
+        }
+      }
+    },
+    {
+      "id": "step-3",
+      "risk": "safe",
+      "action": {
+        "kind": "click",
+        "target": {
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Search"
+            },
+            {
+              "kind": "css",
+              "selector": "input:nth-of-type(2)",
+              "scope": {
+                "kind": "css",
+                "selector": "form"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "step-4",
+      "risk": "safe",
+      "action": {
+        "kind": "click",
+        "target": {
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "link",
+              "name": "Open Sub-Account"
+            },
+            {
+              "kind": "text",
+              "text": "Open Sub-Account",
+              "exact": true
+            },
+            {
+              "kind": "css",
+              "selector": "tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(1) > p:nth-of-type(1) > a:nth-of-type(1)",
+              "scope": {
+                "kind": "css",
+                "selector": "table"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "step-5",
+      "risk": "safe",
+      "action": {
+        "kind": "select",
+        "target": {
+          "strategies": [
+            {
+              "kind": "attribute",
+              "attribute": "name",
+              "value": "accountType"
+            },
+            {
+              "kind": "text",
+              "text": "Savings Checking",
+              "exact": true
+            },
+            {
+              "kind": "css",
+              "selector": "tbody:nth-of-type(1) > tr:nth-of-type(2) > td:nth-of-type(2) > select:nth-of-type(1)",
+              "scope": {
+                "kind": "css",
+                "selector": "table"
+              }
+            }
+          ]
+        },
+        "value": {
+          "kind": "input_ref",
+          "name": "account_type"
+        }
+      }
+    },
+    {
+      "id": "step-6",
+      "risk": "safe",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "strategies": [
+            {
+              "kind": "attribute",
+              "attribute": "name",
+              "value": "initialDeposit"
+            },
+            {
+              "kind": "css",
+              "selector": "tbody:nth-of-type(1) > tr:nth-of-type(3) > td:nth-of-type(2) > input:nth-of-type(1)",
+              "scope": {
+                "kind": "css",
+                "selector": "table"
+              }
+            }
+          ]
+        },
+        "value": {
+          "kind": "input_ref",
+          "name": "initial_deposit"
+        }
+      }
+    },
+    {
+      "id": "step-7",
+      "risk": "safe",
+      "action": {
+        "kind": "click",
+        "target": {
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Continue"
+            },
+            {
+              "kind": "css",
+              "selector": "tbody:nth-of-type(1) > tr:nth-of-type(4) > td:nth-of-type(1) > input:nth-of-type(1)",
+              "scope": {
+                "kind": "css",
+                "selector": "table"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "step-8",
+      "risk": "irreversible",
+      "action": {
+        "kind": "click",
+        "target": {
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Confirm & Open Account"
+            },
+            {
+              "kind": "css",
+              "selector": "tbody:nth-of-type(1) > tr:nth-of-type(5) > td:nth-of-type(1) > input:nth-of-type(1)",
+              "scope": {
+                "kind": "css",
+                "selector": "table"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "step-9",
+      "risk": "safe",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "SAV-48213-3",
+              "exact": true
+            },
+            {
+              "kind": "css",
+              "selector": "+ td",
+              "scope": {
+                "kind": "text",
+                "text": "New Account Number",
+                "exact": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "step-10",
+      "risk": "safe",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "CONF-1002",
+              "exact": true
+            },
+            {
+              "kind": "css",
+              "selector": "+ td",
+              "scope": {
+                "kind": "text",
+                "text": "Confirmation ID",
+                "exact": true
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "businessOutcomes": [
+    {
+      "code": "MEMBER_NOT_FOUND",
+      "classification": "business_outcome",
+      "detector": {
+        "kind": "element_visible",
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "No member found for ID",
+              "exact": false
+            }
+          ]
+        }
+      },
+      "message": {
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "No member found for ID",
+              "exact": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": "ACCOUNT_NOT_ELIGIBLE",
+      "classification": "business_outcome",
+      "detector": {
+        "kind": "element_visible",
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "is not eligible to open new accounts",
+              "exact": false
+            }
+          ]
+        }
+      },
+      "message": {
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "is not eligible to open new accounts",
+              "exact": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": "VALIDATION_ERROR",
+      "classification": "business_outcome",
+      "detector": {
+        "kind": "element_visible",
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "Initial deposit must be a number of at least",
+              "exact": false
+            }
+          ]
+        }
+      },
+      "message": {
+        "target": {
+          "strategies": [
+            {
+              "kind": "text",
+              "text": "Initial deposit must be a number of at least",
+              "exact": false
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "successCheckpoint": {
+    "kind": "element_visible",
+    "target": {
+      "strategies": [
+        {
+          "kind": "role",
+          "role": "heading",
+          "name": "Account Opened"
+        }
+      ]
+    }
+  }
+}

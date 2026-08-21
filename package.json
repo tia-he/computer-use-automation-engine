@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "demo": "tsx scripts/demo.ts",
     "discover": "tsx scripts/run-discovery.ts"
   },
   "dependencies": {

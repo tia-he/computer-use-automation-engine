@@ -30,17 +30,28 @@ function attachHumanActionListeners(): void {
   }
   (window as unknown as { __humanActionListenersAttached?: boolean }).__humanActionListenersAttached = true;
 
-  function describeTarget(el: Element): string {
+  // Assigned onto a plain object rather than declared as named functions:
+  // tsx's esbuild transform (unlike Vitest's) wraps every named function/
+  // const-arrow declaration with a __name(...) helper call for name
+  // preservation. That's invisible on the Node side, but page.evaluate()/
+  // locator.evaluate() ship the serialized function's *own* source text
+  // into an isolated browser context where __name was never defined,
+  // throwing ReferenceError: __name is not defined the moment such a
+  // function runs. Property-assigning an anonymous function expression
+  // avoids the wrapping entirely. See src/surface/playwright-surface.test.ts
+  // for a regression test.
+  const helpers = {} as { describeTarget: (el: Element) => string };
+  helpers.describeTarget = function (el) {
     const name = el.getAttribute("name");
     if (name) return `${el.tagName.toLowerCase()}[name="${name}"]`;
     return el.tagName.toLowerCase();
-  }
+  };
 
   document.addEventListener(
     "click",
     (e) => {
       const el = e.target as Element;
-      report({ type: "click", elementType: el.tagName.toLowerCase(), targetDescription: describeTarget(el) });
+      report({ type: "click", elementType: el.tagName.toLowerCase(), targetDescription: helpers.describeTarget(el) });
     },
     true
   );
@@ -51,7 +62,7 @@ function attachHumanActionListeners(): void {
       report({
         type: "input",
         elementType: el.type || el.tagName.toLowerCase(),
-        targetDescription: describeTarget(el),
+        targetDescription: helpers.describeTarget(el),
         value: el.value,
       });
     },
@@ -64,7 +75,7 @@ function attachHumanActionListeners(): void {
       report({
         type: "change",
         elementType: el.type || el.tagName.toLowerCase(),
-        targetDescription: describeTarget(el),
+        targetDescription: helpers.describeTarget(el),
         value: el.value,
       });
     },
@@ -227,7 +238,11 @@ export class PlaywrightBrowserSurface implements Surface {
     const strategies: LocatorStrategy[] = [];
 
     const info = await locator.evaluate((el: Element) => {
-      function stableAttrOf(node: Element): { attribute: string; value: string } | null {
+      // See the property-assignment comment on attachHumanActionListeners
+      // above: named function declarations inside an evaluate() callback
+      // break under tsx (though not under Vitest's transform).
+      const helpers = {} as { stableAttrOf: (node: Element) => { attribute: string; value: string } | null };
+      helpers.stableAttrOf = function (node) {
         const name = node.getAttribute("name");
         if (name) return { attribute: "name", value: name };
         for (const attr of Array.from(node.attributes)) {
@@ -236,7 +251,7 @@ export class PlaywrightBrowserSurface implements Surface {
         const id = node.id;
         if (id && !/^[a-f0-9-]{8,}$/i.test(id)) return { attribute: "id", value: id };
         return null;
-      }
+      };
 
       const roleMap: Record<string, string> = {
         a: "link",
@@ -284,7 +299,7 @@ export class PlaywrightBrowserSurface implements Surface {
         name = (el.textContent ?? "").trim().replace(/\s+/g, " ");
       }
 
-      const attr = stableAttrOf(el);
+      const attr = helpers.stableAttrOf(el);
       const text = (el.textContent ?? "").trim().replace(/\s+/g, " ");
       const distinctiveText = text.length > 0 && text.length <= 60 ? text : null;
 
@@ -305,9 +320,13 @@ export class PlaywrightBrowserSurface implements Surface {
     }
 
     const scoped = await locator.evaluate((el: Element) => {
-      function stableAttrOf(
-        node: Element
-      ): { kind: "attribute"; attribute: string; value: string } | null {
+      const helpers = {} as {
+        stableAttrOf: (node: Element) => { kind: "attribute"; attribute: string; value: string } | null;
+        nthOfType: (node: Element) => number;
+        segment: (node: Element) => string;
+        shortText: (node: Element) => string | null;
+      };
+      helpers.stableAttrOf = function (node) {
         const name = node.getAttribute("name");
         if (name) return { kind: "attribute", attribute: "name", value: name };
         for (const attr of Array.from(node.attributes)) {
@@ -318,8 +337,8 @@ export class PlaywrightBrowserSurface implements Surface {
         const id = node.id;
         if (id && !/^[a-f0-9-]{8,}$/i.test(id)) return { kind: "attribute", attribute: "id", value: id };
         return null;
-      }
-      function nthOfType(node: Element): number {
+      };
+      helpers.nthOfType = function (node) {
         let i = 1;
         let sib = node.previousElementSibling;
         while (sib) {
@@ -327,14 +346,14 @@ export class PlaywrightBrowserSurface implements Surface {
           sib = sib.previousElementSibling;
         }
         return i;
-      }
-      function segment(node: Element): string {
-        return `${node.tagName.toLowerCase()}:nth-of-type(${nthOfType(node)})`;
-      }
-      function shortText(node: Element): string | null {
+      };
+      helpers.segment = function (node) {
+        return `${node.tagName.toLowerCase()}:nth-of-type(${helpers.nthOfType(node)})`;
+      };
+      helpers.shortText = function (node) {
         const t = (node.textContent ?? "").trim().replace(/\s+/g, " ");
         return t.length > 0 && t.length <= 60 ? t : null;
-      }
+      };
 
       // Prefer "the element right after the one labeled X" when the
       // immediate previous sibling has short, distinctive text (e.g. a
@@ -343,7 +362,7 @@ export class PlaywrightBrowserSurface implements Surface {
       // not be unique on the page (see below).
       const prevSibling = el.previousElementSibling;
       if (prevSibling) {
-        const siblingText = shortText(prevSibling);
+        const siblingText = helpers.shortText(prevSibling);
         if (siblingText) {
           return { scope: { kind: "text", text: siblingText, exact: true }, selector: `+ ${el.tagName.toLowerCase()}` };
         }
@@ -365,18 +384,18 @@ export class PlaywrightBrowserSurface implements Surface {
       while (depth < 8) {
         const parent = node.parentElement;
         if (!parent || parent === document.body) break;
-        const attr = stableAttrOf(parent);
+        const attr = helpers.stableAttrOf(parent);
         if (attr) {
-          path.unshift(segment(node));
+          path.unshift(helpers.segment(node));
           anchor = attr;
           break;
         }
         if (parent.tagName === "TABLE" || parent.tagName === "FORM") {
-          path.unshift(segment(node));
+          path.unshift(helpers.segment(node));
           anchor = { kind: "css", selector: parent.tagName.toLowerCase() };
           break;
         }
-        path.unshift(segment(node));
+        path.unshift(helpers.segment(node));
         node = parent;
         depth++;
       }
@@ -414,7 +433,13 @@ export class PlaywrightBrowserSurface implements Surface {
         form: "form",
       };
 
-      function nodeInfo(el: Element): { role: string | null; name: string } {
+      const lines: string[] = [];
+      const helpers = {} as {
+        nodeInfo: (el: Element) => { role: string | null; name: string };
+        walk: (el: Element, depth: number) => void;
+      };
+
+      helpers.nodeInfo = function (el) {
         const tag = el.tagName.toLowerCase();
         const type = (el as HTMLInputElement).type?.toLowerCase();
         let role: string | null = null;
@@ -441,13 +466,11 @@ export class PlaywrightBrowserSurface implements Surface {
           name = (el.textContent ?? "").trim().replace(/\s+/g, " ");
         }
         return { role, name };
-      }
+      };
 
-      const lines: string[] = [];
-
-      function walk(el: Element, depth: number) {
+      helpers.walk = function (el, depth) {
         if (lines.length > 300) return;
-        const info = nodeInfo(el);
+        const info = helpers.nodeInfo(el);
         const directText = Array.from(el.childNodes)
           .filter((n) => n.nodeType === 3)
           .map((n) => (n.textContent ?? "").trim())
@@ -469,11 +492,11 @@ export class PlaywrightBrowserSurface implements Surface {
         }
 
         for (const child of Array.from(el.children)) {
-          walk(child, nextDepth);
+          helpers.walk(child, nextDepth);
         }
-      }
+      };
 
-      walk(document.body, 0);
+      helpers.walk(document.body, 0);
       return lines.join("\n");
     });
   }
