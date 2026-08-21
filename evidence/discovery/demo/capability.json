@@ -5,8 +5,8 @@
   "description": "Search for a member, open a new sub-account, and reach the confirmation screen with the new account number and confirmation ID.",
   "targetProfileId": "mock-bank",
   "provenance": {
-    "discoveryRunId": "demo-1787278874924-discovery",
-    "recordedAt": "2026-08-21T02:21:17.394Z",
+    "discoveryRunId": "demo-1787280239497-discovery",
+    "recordedAt": "2026-08-21T02:44:01.989Z",
     "model": "deterministic-demo-provider"
   },
   "approval": "draft",
@@ -255,7 +255,7 @@
           "strategies": [
             {
               "kind": "text",
-              "text": "SAV-48213-3",
+              "text": "SAV-48213-1",
               "exact": true
             },
             {
@@ -280,7 +280,7 @@
           "strategies": [
             {
               "kind": "text",
-              "text": "CONF-1002",
+              "text": "CONF-1000",
               "exact": true
             },
             {

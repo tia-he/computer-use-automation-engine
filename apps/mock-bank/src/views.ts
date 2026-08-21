@@ -11,7 +11,7 @@ export function escapeHtml(value: string): string {
 
 /**
  * Shared page shell. Table-based, no CSS framework, no data-testid anywhere
- * in this file — that's intentional (see REPORT.md, "legacy surface").
+ * in this file — that's intentional (see docs/architecture.md, "locator strategy").
  */
 function layout(title: string, bodyHtml: string): string {
   return `<!doctype html>
